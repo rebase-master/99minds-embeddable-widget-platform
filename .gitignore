@@ -1,0 +1,40 @@
+# Local Claude / planning artifacts (not for the public repo).
+.claude/rules
+.claude/worktrees
+.claudeignore
+CLAUDE.md
+PLAN.md
+REVIEW_DECISIONS.md
+TRADEOFFS.md
+
+# Rails secrets — never commit decryption keys.
+/config/*.key
+/config/credentials/*.key
+
+# Logs and temporary files.
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+/tmp/pids/*
+!/tmp/pids/.keep
+
+# Storage (uploaded files, SQLite, etc.). We don't use Active Storage but defensive.
+/storage/*
+!/storage/.keep
+
+# Bundler local config.
+/.bundle
+/vendor/bundle
+
+# RSpec.
+/coverage
+.rspec_status
+
+# IDE.
+.idea/
+.vscode/
+
+# OS.
+.DS_Store
+Thumbs.db

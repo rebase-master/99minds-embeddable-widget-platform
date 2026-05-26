@@ -1,0 +1,20 @@
+# Action Cable adapter config.
+#
+# Development uses the Redis adapter (NOT the default `async`) so that broadcasts
+# from Sidekiq workers reach the web process — they're separate containers in our
+# Docker Compose setup. Without this, the demo would silently fail to receive
+# triggers because the in-process async adapter doesn't cross process boundaries.
+# See PLAN.md Stage 1.6 hello-world sanity check.
+
+development:
+  adapter: redis
+  url: <%= ENV.fetch("REDIS_URL", "redis://localhost:6379/1") %>
+  channel_prefix: widget_platform_development
+
+test:
+  adapter: test
+
+production:
+  adapter: redis
+  url: <%= ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" } %>
+  channel_prefix: widget_platform_production

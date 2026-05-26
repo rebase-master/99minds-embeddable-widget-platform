@@ -1,0 +1,35 @@
+# Development image for Docker Compose.
+# The Rails-generated production Dockerfile (Dockerfile) is kept untouched as a
+# deployment-reference artifact. This file is what `docker-compose.yml` builds.
+#
+# Pre-req: run `bundle install` on host once to generate Gemfile.lock before the
+# first `docker compose build`. See README for the full setup sequence.
+
+ARG RUBY_VERSION=3.4.2
+FROM docker.io/library/ruby:${RUBY_VERSION}-slim
+
+# OS deps for native gems (pg) and dev tooling.
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y \
+      build-essential \
+      libpq-dev \
+      libyaml-dev \
+      pkg-config \
+      git \
+      curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install gems first for build-cache friendliness.
+COPY Gemfile Gemfile.lock ./
+RUN gem install bundler && bundle install
+
+# Application source (overridden by bind-mount at runtime for live reload).
+COPY . .
+
+# Reuse the Rails-generated entrypoint (handles db:prepare on `rails server`).
+ENTRYPOINT ["/app/bin/docker-entrypoint"]
+
+EXPOSE 3000
+CMD ["./bin/rails", "server", "-b", "0.0.0.0", "-p", "3000"]

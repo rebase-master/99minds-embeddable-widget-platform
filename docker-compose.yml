@@ -1,0 +1,97 @@
+# Docker Compose for local development.
+#
+# Services:
+#   web      — Rails API server (puma) on :3000
+#   worker   — Sidekiq worker (no exposed port)
+#   postgres — Postgres 16
+#   redis    — Redis 7 (Action Cable + Sidekiq + Rails cache)
+#
+# Env vars below are DEV-ONLY. They live in git intentionally so the reviewer
+# can `docker compose up` with zero setup. ROTATE BEFORE PRODUCTION USE.
+# See REVIEW_DECISIONS.md item 19.
+
+x-app-env: &app-env
+  RAILS_ENV: development
+  DATABASE_HOST: postgres
+  DATABASE_PORT: 5432
+  DATABASE_USERNAME: postgres
+  DATABASE_PASSWORD: postgres
+  DATABASE_NAME: widget_platform_development
+  DATABASE_NAME_TEST: widget_platform_test
+  REDIS_URL: redis://redis:6379/1
+  # API key hashing pepper — see TRADEOFFS.md Stage 1.2b.
+  API_KEY_PEPPER: 7fc7c2150e375759b81cc6f00741f419a0f3ea0a066625e7f4d6a8e72899c398
+  # SDK session token signing key (ActiveSupport::MessageVerifier) — see TRADEOFFS.md Stage 1.5d.
+  SDK_JWT_SIGNING_KEY: 10ac657201bb2f6362714dfaac0cd5b21ce846eaa0db391f1698c3e72b75fd1a
+  # Rails 8 Active Record Encryption keys — see CLAUDE.md Runtime Gotchas §4.
+  ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: 2c53664fd09ffd1ca3a08f769526bbec97ffa72f516d0a845f7821d2dde33550
+  ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY: b31e39603e1a601c337584a464c42f06a4e395de8dc581b14883ba6993c8f4de
+  ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT: 5d755e5f5c651e69cd46cf353c2b318807ea967cf49fd7fd08c5a5b3ae436d7f
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: ./bin/rails server -b 0.0.0.0 -p 3000
+    environment:
+      <<: *app-env
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - bundle_cache:/usr/local/bundle
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: bundle exec sidekiq
+    environment:
+      <<: *app-env
+    volumes:
+      - .:/app
+      - bundle_cache:/usr/local/bundle
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: widget_platform_development
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+  bundle_cache:
