@@ -15,6 +15,8 @@ gem "redis", ">= 5"
 # Background jobs.
 gem "sidekiq", "~> 7.3"
 
+gem "connection_pool", "~> 2.4"
+
 # Multi-tenancy. See TRADEOFFS.md Stage 1.2 for choice rationale.
 gem "acts_as_tenant", "~> 1.0"
 
