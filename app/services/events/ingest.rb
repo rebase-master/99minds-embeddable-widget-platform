@@ -1,24 +1,26 @@
 module Events
   class Ingest
     REPLAY_WINDOW = 5.minutes
-
-    class Error < StandardError
-      attr_reader :status, :code
-
-      def initialize(status:, code:, message:)
-        super(message)
-        @status = status
-        @code = code
-      end
-    end
+    # ISO8601 strings must carry Z or ±HH:MM (or ±HHMM) offset. Naive timestamps would be
+    # parsed against the server's TZ and silently mis-skew the replay window.
+    ISO8601_WITH_OFFSET = /(?:Z|[+-]\d{2}:?\d{2})\z/
 
     def self.call(merchant:, raw_body:, idempotency_key:)
       payload = JSON.parse(raw_body)
-      occurred_at = Time.iso8601(payload.fetch("occurred_at"))
 
+      shopper_id = require_nonblank_string(payload, "shopper_id")
+      event_type = require_nonblank_string(payload, "event_type")
+      occurred_at_str = require_nonblank_string(payload, "occurred_at")
+      unless occurred_at_str.match?(ISO8601_WITH_OFFSET)
+        raise invalid_payload("occurred_at must include a timezone designator (Z or ±HH:MM).")
+      end
+      data = payload.fetch("data", {})
+      raise invalid_payload("data must be a JSON object.") unless data.is_a?(Hash)
+
+      occurred_at = Time.iso8601(occurred_at_str)
       if (Time.current - occurred_at).abs > REPLAY_WINDOW
-        raise Error.new(status: :bad_request, code: "event.outside_replay_window",
-                        message: "occurred_at outside the replay window.")
+        raise ApiError.new(status: :bad_request, code: "event.outside_replay_window",
+                           message: "occurred_at outside the replay window.")
       end
 
       content_hash = Digest::SHA256.hexdigest(raw_body)
@@ -27,9 +29,9 @@ module Events
       result = Event.insert_all(
         [ {
           merchant_id: merchant.id,
-          shopper_id: payload.fetch("shopper_id"),
-          event_type: payload.fetch("event_type"),
-          data: payload["data"] || {},
+          shopper_id: shopper_id,
+          event_type: event_type,
+          data: data,
           occurred_at: occurred_at,
           received_at: now,
           idempotency_key: idempotency_key,
@@ -46,16 +48,31 @@ module Events
         EvaluateEventJob.perform_async(event_id, merchant.id)
         event_id
       else
-        existing = Event.find_by!(merchant_id: merchant.id, idempotency_key: idempotency_key)
+        existing = Event.find_by(merchant_id: merchant.id, idempotency_key: idempotency_key)
+        unless existing
+          raise ApiError.new(status: :internal_server_error, code: "event.dedup_invariant_breach",
+                             message: "Idempotency conflict reported but no matching row found.")
+        end
         if existing.idempotency_content_hash != content_hash
-          raise Error.new(status: :unprocessable_entity, code: "idempotency.content_mismatch",
-                          message: "Idempotency-Key reused with different body.")
+          raise ApiError.new(status: :unprocessable_entity, code: "idempotency.content_mismatch",
+                             message: "Idempotency-Key reused with different body.")
         end
         existing.id
       end
     rescue KeyError, ArgumentError, TypeError
-      raise Error.new(status: :bad_request, code: "event.invalid_payload",
-                      message: "Payload missing required fields or fields invalid.")
+      raise invalid_payload("Payload missing required fields or fields invalid.")
     end
+
+    def self.require_nonblank_string(payload, key)
+      value = payload.fetch(key)
+      raise invalid_payload("#{key} must be a non-empty string.") unless value.is_a?(String) && !value.empty?
+      value
+    end
+    private_class_method :require_nonblank_string
+
+    def self.invalid_payload(message)
+      ApiError.new(status: :bad_request, code: "event.invalid_payload", message: message)
+    end
+    private_class_method :invalid_payload
   end
 end
