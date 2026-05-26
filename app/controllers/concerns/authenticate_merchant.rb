@@ -20,7 +20,7 @@ module AuthenticateMerchant
   end
 
   def render_unauthorized
-    render json: { error: { code: "auth.unauthorized", message: "Invalid or missing API key." } },
-           status: :unauthorized
+    render_api_error(status: :unauthorized, code: "auth.unauthorized",
+                     message: "Invalid or missing API key.")
   end
 end
