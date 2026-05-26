@@ -4,7 +4,7 @@ class ApplicationController < ActionController::API
                      message: "Body is not valid JSON.")
   end
 
-  rescue_from Events::Ingest::Error do |e|
+  rescue_from ApiError do |e|
     render_api_error(status: e.status, code: e.code, message: e.message)
   end
 
