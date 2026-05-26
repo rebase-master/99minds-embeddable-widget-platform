@@ -1,3 +1,3 @@
 class Campaign < ApplicationRecord
-  belongs_to :merchant
+  acts_as_tenant :merchant
 end

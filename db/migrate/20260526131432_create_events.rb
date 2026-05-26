@@ -2,19 +2,12 @@ class CreateEvents < ActiveRecord::Migration[8.1]
   def change
     create_table :events do |t|
       t.references :merchant, null: false, foreign_key: true
-      # Merchant-supplied shopper identifier (opaque to us).
       t.string :shopper_id, null: false
-      # e.g. "cart.updated", "order.placed".
       t.string :event_type, null: false
-      # Free-form payload from the storefront.
       t.jsonb :data, null: false, default: {}
-      # When the shopper-side event happened.
       t.datetime :occurred_at, null: false
-      # When we received it (≠ created_at conceptually; same in practice).
       t.datetime :received_at, null: false
-      # Opaque UUID supplied by storefront, used for ON CONFLICT dedup. App enforces presence at ingest.
       t.string :idempotency_key
-      # SHA256 of raw body; same key + different body → 422 idempotency.content_mismatch.
       t.string :idempotency_content_hash
 
       t.timestamps
