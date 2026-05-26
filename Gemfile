@@ -55,5 +55,5 @@ end
 
 group :test do
   # Matchers for ActiveRecord/Rails associations, validations, etc.
-  gem "shoulda-matchers", "~> 6.4"
+  gem "shoulda-matchers", "~> 7.0"
 end
