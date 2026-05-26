@@ -6,6 +6,7 @@ CLAUDE.md
 PLAN.md
 REVIEW_DECISIONS.md
 TRADEOFFS.md
+REVIEW_BACKLOG.md
 
 # Rails secrets — never commit decryption keys.
 /config/*.key
