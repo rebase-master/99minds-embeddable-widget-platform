@@ -13,6 +13,11 @@ class ApplicationController < ActionController::API
                      message: "Tenant context required for this endpoint.")
   end
 
+  rescue_from ActiveRecord::RecordNotFound do
+    render_api_error(status: :not_found, code: "record.not_found",
+                     message: "Record not found.")
+  end
+
   rescue_from ApiError do |e|
     render_api_error(status: e.status, code: e.code, message: e.message)
   end
