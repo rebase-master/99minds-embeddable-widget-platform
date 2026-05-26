@@ -6,10 +6,9 @@ Rails.application.routes.draw do
   # Health check used by Docker, load balancers, and the demo smoke test.
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # API routes (v1 — versioned per the brief). Filled in Stages 1.3, 1.4, 1.5.
   namespace :api do
     namespace :v1 do
-      # resources :events, only: [ :create ]
+      resources :events, only: [ :create ]
       # resources :campaigns
       # namespace :sdk do
       #   resource :theme, only: [ :show ]
