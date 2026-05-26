@@ -25,40 +25,47 @@ module Events
 
       content_hash = Digest::SHA256.hexdigest(raw_body)
       now = Time.current
+      event_id = nil
+      newly_inserted = false
 
-      result = Event.insert_all(
-        [ {
-          merchant_id: merchant.id,
-          shopper_id: shopper_id,
-          event_type: event_type,
-          data: data,
-          occurred_at: occurred_at,
-          received_at: now,
-          idempotency_key: idempotency_key,
-          idempotency_content_hash: content_hash,
-          created_at: now,
-          updated_at: now
-        } ],
-        unique_by: :index_events_on_merchant_id_and_idempotency_key_present,
-        returning: [ :id ]
-      )
+      # Explicit transaction so perform_async fires outside it (defensive against future wrapping TX).
+      ActiveRecord::Base.transaction do
+        result = Event.insert_all(
+          [ {
+            merchant_id: merchant.id,
+            shopper_id: shopper_id,
+            event_type: event_type,
+            data: data,
+            occurred_at: occurred_at,
+            received_at: now,
+            idempotency_key: idempotency_key,
+            idempotency_content_hash: content_hash,
+            created_at: now,
+            updated_at: now
+          } ],
+          unique_by: :index_events_on_merchant_id_and_idempotency_key_present,
+          returning: [ :id ]
+        )
 
-      if (row = result.rows.first)
-        event_id = row.first
-        EvaluateEventJob.perform_async(event_id, merchant.id)
-        event_id
-      else
-        existing = Event.find_by(merchant_id: merchant.id, idempotency_key: idempotency_key)
-        unless existing
-          raise ApiError.new(status: :internal_server_error, code: "event.dedup_invariant_breach",
-                             message: "Idempotency conflict reported but no matching row found.")
+        if (row = result.rows.first)
+          event_id = row.first
+          newly_inserted = true
+        else
+          existing = Event.find_by(merchant_id: merchant.id, idempotency_key: idempotency_key)
+          unless existing
+            raise ApiError.new(status: :internal_server_error, code: "event.dedup_invariant_breach",
+                               message: "Idempotency conflict reported but no matching row found.")
+          end
+          if existing.idempotency_content_hash != content_hash
+            raise ApiError.new(status: :unprocessable_entity, code: "idempotency.content_mismatch",
+                               message: "Idempotency-Key reused with different body.")
+          end
+          event_id = existing.id
         end
-        if existing.idempotency_content_hash != content_hash
-          raise ApiError.new(status: :unprocessable_entity, code: "idempotency.content_mismatch",
-                             message: "Idempotency-Key reused with different body.")
-        end
-        existing.id
       end
+
+      EvaluateEventJob.perform_async(event_id, merchant.id) if newly_inserted
+      event_id
     rescue KeyError, ArgumentError, TypeError
       raise invalid_payload("Payload missing required fields or fields invalid.")
     end
