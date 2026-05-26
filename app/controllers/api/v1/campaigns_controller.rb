@@ -38,14 +38,25 @@ module Api
       private
 
       def attributes_from_params
-        trigger = params[:trigger] || {}
+        trigger = ensure_hash(params[:trigger], "trigger")
+        render_data = ensure_hash(params[:render], "render")
+        active = params[:active].nil? ? true : params[:active]
+
         {
           name: params[:name],
-          active: params.fetch(:active, true),
-          event_type: trigger[:event_type],
-          conditions: trigger[:conditions] || [],
-          render: params[:render] || {}
+          active: active,
+          event_type: trigger["event_type"],
+          conditions: trigger["conditions"] || [],
+          render: render_data
         }
+      end
+
+      def ensure_hash(value, field_name)
+        return {} if value.nil?
+        return value.to_h if value.is_a?(ActionController::Parameters)
+        return value if value.is_a?(Hash)
+        raise ApiError.new(status: :unprocessable_entity, code: "campaign.invalid",
+                           message: "#{field_name} must be a JSON object.")
       end
 
       def serialize(c)
