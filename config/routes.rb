@@ -10,10 +10,10 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :events, only: [ :create ]
       resources :campaigns
-      # namespace :sdk do
-      #   resource :theme, only: [ :show ]
-      #   resources :sessions, only: [ :create ]
-      # end
+      namespace :sdk do
+        resource :theme, only: [ :show ]
+        resources :sessions, only: [ :create ]
+      end
     end
   end
 end
