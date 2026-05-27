@@ -1,5 +1,5 @@
 module ConditionEvaluator
-  OPERATORS = %w[eq neq gt gte lt lte in exists].freeze
+  OPERATORS = %w[eq gt gte lt lte exists].freeze
 
   def self.match?(conditions, event_data)
     return false unless conditions.is_a?(Array)
@@ -13,12 +13,10 @@ module ConditionEvaluator
 
     case condition["op"]
     when "eq"     then actual == value
-    when "neq"    then actual != value
     when "gt"     then numeric_compare(actual, value) { |a, v| a > v }
     when "gte"    then numeric_compare(actual, value) { |a, v| a >= v }
     when "lt"     then numeric_compare(actual, value) { |a, v| a < v }
     when "lte"    then numeric_compare(actual, value) { |a, v| a <= v }
-    when "in"     then value.is_a?(Array) && value.include?(actual)
     when "exists" then !actual.nil?
     else false
     end
