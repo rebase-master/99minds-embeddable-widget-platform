@@ -6,8 +6,10 @@ class EvaluateEventJob
   def perform(event_id, merchant_id)
     ActsAsTenant.with_tenant(Merchant.find(merchant_id)) do
       event = Event.find(event_id)
+      payload = event_payload(event)
+
       Campaign.where(event_type: event.event_type, active: true).find_each do |campaign|
-        next unless ConditionEvaluator.match?(campaign.conditions, event.data)
+        next unless ConditionEvaluator.match?(campaign.conditions, payload)
 
         now = Time.current
         result = Trigger.insert_all(
@@ -30,5 +32,18 @@ class EvaluateEventJob
         # Triggers::Dispatch.call(result.rows.first.first) — wired in Stage 1.6.
       end
     end
+  end
+
+  private
+
+  # Wire-shaped event payload — matches what the storefront POSTed. Condition fields
+  # like "data.cart_total_cents" or "shopper_id" resolve against this rooted hash.
+  def event_payload(event)
+    {
+      "shopper_id" => event.shopper_id,
+      "event_type" => event.event_type,
+      "occurred_at" => event.occurred_at.iso8601,
+      "data" => event.data
+    }
   end
 end
