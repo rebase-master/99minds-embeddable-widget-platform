@@ -85,6 +85,32 @@ services:
       redis:
         condition: service_healthy
 
+  # Test runner — RAILS_ENV: test overrides the shared development value.
+  # Usage:
+  #   docker compose run --rm test bin/rails db:test:prepare   # one-time
+  #   docker compose run --rm test bundle exec rspec
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+
+    environment:
+      <<: *app-env
+      RAILS_ENV: test
+
+    volumes:
+      - .:/app
+      - bundle_cache:/usr/local/bundle
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    profiles:
+      - test
+
   postgres:
     image: postgres:16-alpine
 
