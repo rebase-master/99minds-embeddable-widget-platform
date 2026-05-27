@@ -123,7 +123,13 @@ All three are wired into GitHub Actions on push (no service containers needed �
 
 ### Tests
 
-RSpec is set up but specs are deferred to Phase 2 — see [§ What we'd build next](#what-wed-build-next). The smoke test above is intentionally manual for v1.
+```bash
+# One-time: create and migrate the test database (docker-compose only sets up development).
+docker compose exec web bin/rails db:test:prepare
+
+# Run the suite (rails_helper.rb forces RAILS_ENV=test regardless of container env).
+docker compose exec web bundle exec rspec
+```
 
 ---
 
@@ -367,7 +373,8 @@ docker compose up --build              # boot everything
 docker compose exec web bin/rails db:seed
 docker compose exec web bin/rails console
 docker compose exec web bundle exec rubocop
-docker compose exec web bundle exec rspec       # (Phase 2; tests not in v1)
+docker compose exec web bin/rails db:test:prepare   # one-time test DB setup
+docker compose exec web bundle exec rspec            # run specs
 docker compose down -v                 # nuke volumes (Postgres, Redis, bundle cache)
 ```
 
