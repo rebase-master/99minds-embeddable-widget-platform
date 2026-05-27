@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SDK demo</title>
+  <style>
+    body { font-family: ui-monospace, monospace; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    pre { background: #f4f4f4; padding: 1rem; white-space: pre-wrap; word-break: break-all; }
+    #status { padding: 0.5rem; border-radius: 4px; }
+    .ok    { background: #d1f4d1; }
+    .wait  { background: #fff3cd; }
+    .err   { background: #f8d7da; }
+  </style>
+</head>
+<body>
+  <h1>SDK demo</h1>
+  <p>
+    Loads <code>?token=...</code> from the URL. The seed script prints a fresh
+    15-minute session token to stdout — copy it into the URL.
+  </p>
+  <div id="status" class="wait">Connecting…</div>
+  <h3>Triggers received</h3>
+  <pre id="log">(none yet)</pre>
+
+  <script type="module">
+    import { createConsumer } from "https://esm.sh/@rails/actioncable@8";
+
+    const token = new URLSearchParams(window.location.search).get("token");
+    const status = document.getElementById("status");
+    const log    = document.getElementById("log");
+
+    if (!token) {
+      status.className = "err";
+      status.textContent = "Missing ?token=... in URL. Run `bin/rails db:seed` and copy the printed token.";
+    } else {
+      const url = `ws://${window.location.host}/cable?token=${encodeURIComponent(token)}`;
+      const consumer = createConsumer(url);
+
+      consumer.subscriptions.create("TriggersChannel", {
+        connected()    { status.className = "ok";   status.textContent = "Connected. Waiting for triggers."; },
+        disconnected() { status.className = "wait"; status.textContent = "Disconnected."; },
+        rejected()     { status.className = "err";  status.textContent = "Rejected. Bad or expired token."; },
+        received(data) {
+          const stamp = new Date().toISOString();
+          log.textContent = `[${stamp}] ${JSON.stringify(data, null, 2)}\n\n` + log.textContent;
+        }
+      });
+    }
+  </script>
+</body>
+</html>
