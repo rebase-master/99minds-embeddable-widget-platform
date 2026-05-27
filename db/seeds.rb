@@ -55,17 +55,40 @@ end
 shopper_id = "shp_demo"
 token = Sdk::SessionToken.encode(merchant_id: merchant.id, shopper_id: shopper_id)
 
-# Ready-to-paste curl with pre-computed signature.
+# Ready-to-paste curls with pre-computed signatures for each test scenario.
 # Body must be byte-identical to what curl sends — JSON.generate emits a stable single-line form.
-idem_key    = SecureRandom.uuid
+sign = ->(idem, body) { OpenSSL::HMAC.hexdigest("SHA256", hmac_secret, "#{idem}:#{body}") }
+
+# Test 1 (happy path) + Test 2 (content mismatch) share the same Idempotency-Key.
+idem_ab     = SecureRandom.uuid
 occurred_at = Time.current.utc.iso8601
-body        = JSON.generate(
-  "shopper_id"  => shopper_id,
-  "event_type"  => "cart.updated",
-  "occurred_at" => occurred_at,
-  "data"        => { "cart_total_cents" => 7500, "currency" => "USD", "item_count" => 5 }
+body_a      = JSON.generate(
+  "shopper_id" => shopper_id, "event_type" => "cart.updated", "occurred_at" => occurred_at,
+  "data" => { "cart_total_cents" => 7500, "currency" => "USD", "item_count" => 5 }
 )
-signature = OpenSSL::HMAC.hexdigest("SHA256", hmac_secret, "#{idem_key}:#{body}")
+body_b = JSON.generate(
+  "shopper_id" => shopper_id, "event_type" => "cart.updated", "occurred_at" => occurred_at,
+  "data" => { "cart_total_cents" => 8500, "currency" => "USD", "item_count" => 5 }
+)
+sig_a = sign.call(idem_ab, body_a)
+sig_b = sign.call(idem_ab, body_b)
+
+# Test 3 (outside replay window): fresh Idempotency-Key, occurred_at 10 minutes ago.
+idem_c   = SecureRandom.uuid
+stale_at = (Time.current - 10.minutes).utc.iso8601
+body_c   = JSON.generate(
+  "shopper_id" => shopper_id, "event_type" => "cart.updated", "occurred_at" => stale_at,
+  "data" => { "cart_total_cents" => 7500, "currency" => "USD", "item_count" => 5 }
+)
+sig_c = sign.call(idem_c, body_c)
+
+# Test 4 (invalid payload): data is a string, not an object.
+idem_d = SecureRandom.uuid
+body_d = JSON.generate(
+  "shopper_id" => shopper_id, "event_type" => "cart.updated", "occurred_at" => occurred_at,
+  "data" => "not a hash"
+)
+sig_d = sign.call(idem_d, body_d)
 
 puts <<~OUTPUT
 
@@ -84,23 +107,56 @@ puts <<~OUTPUT
    Session token:  #{token}
    (15-minute TTL. Mint a fresh one via POST /v1/sdk/sessions.)
 
-  ─── Smoke test ────────────────────────────────────────────────
+  ─── Step 1: open the demo page ────────────────────────────────
 
-  1. Open the demo page (paste in browser):
+     http://localhost:3000/sdk_demo.html?token=#{token}
 
-       http://localhost:3000/sdk_demo.html?token=#{token}
+  Wait for "Connected. Waiting for triggers."
 
-     Wait for "Connected. Waiting for triggers."
+  ─── Step 2: smoke-test scenarios (paste in order) ─────────────
 
-  2. Fire a matching event (pre-computed signature, valid 5 min):
+  ╭── Test 1: happy path → 202, demo page prints 2 triggers ─────╮
 
-       curl -X POST http://localhost:3000/v1/events \\
-         -H "Authorization: Bearer #{api_key}" \\
-         -H "Idempotency-Key: #{idem_key}" \\
-         -H "X-Signature: #{signature}" \\
-         -H "Content-Type: application/json" \\
-         -d '#{body}'
+  curl -X POST http://localhost:3000/v1/events \\
+    -H "Authorization: Bearer #{api_key}" \\
+    -H "Idempotency-Key: #{idem_ab}" \\
+    -H "X-Signature: #{sig_a}" \\
+    -H "Content-Type: application/json" \\
+    -d '#{body_a}'
 
-  3. Demo page should print both campaigns' render payloads within ~1s.
+  ╭── Test 2: content mismatch → 422 (RUN AFTER TEST 1) ─────────╮
+  ╭── Same Idempotency-Key, different cart_total_cents, signature recomputed.
+
+  curl -X POST http://localhost:3000/v1/events \\
+    -H "Authorization: Bearer #{api_key}" \\
+    -H "Idempotency-Key: #{idem_ab}" \\
+    -H "X-Signature: #{sig_b}" \\
+    -H "Content-Type: application/json" \\
+    -d '#{body_b}'
+
+  ╭── Test 3: outside replay window → 400 ───────────────────────╮
+  ╭── occurred_at is 10 min ago; fresh Idempotency-Key.
+
+  curl -X POST http://localhost:3000/v1/events \\
+    -H "Authorization: Bearer #{api_key}" \\
+    -H "Idempotency-Key: #{idem_c}" \\
+    -H "X-Signature: #{sig_c}" \\
+    -H "Content-Type: application/json" \\
+    -d '#{body_c}'
+
+  ╭── Test 4: invalid payload (data is a string) → 400 ──────────╮
+
+  curl -X POST http://localhost:3000/v1/events \\
+    -H "Authorization: Bearer #{api_key}" \\
+    -H "Idempotency-Key: #{idem_d}" \\
+    -H "X-Signature: #{sig_d}" \\
+    -H "Content-Type: application/json" \\
+    -d '#{body_d}'
+
+  Only Test 1 should make the demo page light up. Tests 2–4 should
+  return error envelopes and the page stays quiet.
+
+  All four curls are valid for ~5 minutes from this seed time
+  (replay-window cutoff). Re-seed if you take longer.
 
 OUTPUT
