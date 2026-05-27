@@ -1,7 +1,6 @@
 module ConditionEvaluator
   OPERATORS = %w[eq neq gt gte lt lte in exists].freeze
 
-  # Returns true if every condition matches the event payload. Implicit AND.
   def self.match?(conditions, event_data)
     return false unless conditions.is_a?(Array)
     conditions.all? { |c| evaluate(c, event_data) }
@@ -9,7 +8,7 @@ module ConditionEvaluator
 
   def self.evaluate(condition, data)
     return false unless condition.is_a?(Hash)
-    actual = FieldPath.resolve(data, condition["field"])
+    actual = resolve_field(data, condition["field"])
     value = condition["value"]
 
     case condition["op"]
@@ -24,6 +23,17 @@ module ConditionEvaluator
     else false
     end
   end
+
+  # Allowlisted dotted-path resolver. Hash + String keys only — no `send`/`eval`/`dig`.
+  def self.resolve_field(hash, path)
+    return nil unless hash.is_a?(Hash) && path.is_a?(String) && !path.empty?
+
+    path.split(".").reduce(hash) do |current, key|
+      return nil unless current.is_a?(Hash)
+      current[key]
+    end
+  end
+  private_class_method :resolve_field
 
   def self.numeric_compare(actual, value)
     return false unless actual.is_a?(Numeric) && value.is_a?(Numeric)
