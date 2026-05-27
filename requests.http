@@ -1,0 +1,99 @@
+### Variables ─────────────────────────────────────────────────
+### Paste the values from `bin/rails db:seed` output here.
+
+@host = http://localhost:3000
+@api_key = mk_dev_PASTE_FROM_SEED_OUTPUT
+@hmac_secret = PASTE_FROM_SEED_OUTPUT
+@sdk_public_key = sdk_dev_PASTE_FROM_SEED_OUTPUT
+@shopper_id = shp_demo
+
+### ─────────────────────────────────────────────────────────────
+### EVENT INGESTION
+### ─────────────────────────────────────────────────────────────
+### X-Signature must be HMAC-SHA256("{Idempotency-Key}:{raw_body}", hmac_secret).
+### The signed payload extends the brief (closes the in-window replay hole —
+### see README "Design decisions / HMAC payload"). The seed prints a curl
+### with a pre-computed signature for the smoke test.
+
+### Ingest event (signature placeholder — recompute or use seed output)
+POST {{host}}/v1/events
+Authorization: Bearer {{api_key}}
+Idempotency-Key: 11111111-1111-1111-1111-111111111111
+X-Signature: PASTE_HMAC_SHA256_HEX
+Content-Type: application/json
+
+{
+  "shopper_id": "{{shopper_id}}",
+  "event_type": "cart.updated",
+  "occurred_at": "2026-05-27T02:00:00Z",
+  "data": { "cart_total_cents": 7500, "currency": "USD", "item_count": 3 }
+}
+
+### ─────────────────────────────────────────────────────────────
+### CAMPAIGNS (merchant-facing CRUD)
+### ─────────────────────────────────────────────────────────────
+
+### List campaigns
+GET {{host}}/v1/campaigns
+Authorization: Bearer {{api_key}}
+
+### Show campaign
+GET {{host}}/v1/campaigns/1
+Authorization: Bearer {{api_key}}
+
+### Create campaign
+POST {{host}}/v1/campaigns
+Authorization: Bearer {{api_key}}
+Content-Type: application/json
+
+{
+  "name": "Free shipping over $50",
+  "active": true,
+  "trigger": {
+    "event_type": "cart.updated",
+    "conditions": [
+      { "field": "data.cart_total_cents", "op": "gte", "value": 5000 }
+    ]
+  },
+  "render": {
+    "component": "banner",
+    "payload": {
+      "title": "You've unlocked free shipping",
+      "body": "No code needed — applied at checkout",
+      "cta": { "label": "Continue", "url": "/checkout" }
+    }
+  }
+}
+
+### Update campaign (pause it)
+PATCH {{host}}/v1/campaigns/1
+Authorization: Bearer {{api_key}}
+Content-Type: application/json
+
+{ "active": false }
+
+### Delete campaign
+DELETE {{host}}/v1/campaigns/1
+Authorization: Bearer {{api_key}}
+
+### ─────────────────────────────────────────────────────────────
+### SDK (browser-facing)
+### ─────────────────────────────────────────────────────────────
+
+### Get theme (browser side, public key auth)
+GET {{host}}/v1/sdk/theme
+Authorization: Bearer {{sdk_public_key}}
+
+### Mint SDK session token (server-to-server, merchant secret auth)
+POST {{host}}/v1/sdk/sessions
+Authorization: Bearer {{api_key}}
+Content-Type: application/json
+
+{ "shopper_id": "{{shopper_id}}" }
+
+### ─────────────────────────────────────────────────────────────
+### Health
+### ─────────────────────────────────────────────────────────────
+
+### Liveness (used by Docker healthcheck)
+GET {{host}}/up
