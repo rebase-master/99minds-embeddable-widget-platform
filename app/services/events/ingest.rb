@@ -7,6 +7,7 @@ module Events
 
     def self.call(merchant:, raw_body:, idempotency_key:)
       payload = JSON.parse(raw_body)
+      raise invalid_payload("Payload must be a JSON object.") unless payload.is_a?(Hash)
 
       shopper_id = require_nonblank_string(payload, "shopper_id")
       event_type = require_nonblank_string(payload, "event_type")
