@@ -133,36 +133,36 @@ RSpec is set up but specs are deferred to Phase 2 — see [§ What we'd build ne
 flowchart LR
   subgraph storefront["Merchant's storefront"]
     SF[Backend server]
-    BR[Shopper's browser]
+    BR["Shopper's browser"]
   end
 
   subgraph backend["Our backend"]
     direction TB
-    EV[POST /v1/events]
-    SE[POST /v1/sdk/sessions]
-    TH[GET /v1/sdk/theme]
-    CM[/v1/campaigns CRUD/]
-    WS[ws /cable]
-    SK[Sidekiq: EvaluateEventJob]
+    EV["POST /v1/events"]
+    SE["POST /v1/sdk/sessions"]
+    TH["GET /v1/sdk/theme"]
+    CM["CRUD /v1/campaigns"]
+    WS["ws /cable"]
+    SK["Sidekiq: EvaluateEventJob"]
     PG[(Postgres)]
-    RD[(Redis: pub/sub + cache)]
+    RD[("Redis: pub/sub + cache")]
   end
 
-  SF -- API key + HMAC --> EV
-  SF -- API key + shopper_id --> SE
-  SE -- signed token --> SF
-  SF -. injects token into HTML .-> BR
+  SF -- "API key + HMAC" --> EV
+  SF -- "API key + shopper_id" --> SE
+  SE -- "signed token" --> SF
+  SF -. "injects token into HTML" .-> BR
   BR -- token --> WS
   BR -- sdk_public_key --> TH
-  SF -- API key --> CM
+  SF -- "API key" --> CM
 
-  EV -- persist + ON CONFLICT --> PG
+  EV -- "persist + ON CONFLICT" --> PG
   EV -. enqueue .-> SK
-  SK -- load active campaigns --> PG
-  SK -- insert triggers --> PG
+  SK -- "load active campaigns" --> PG
+  SK -- "insert triggers" --> PG
   SK -- broadcast --> RD
   RD --> WS
-  WS -- render payload --> BR
+  WS -- "render payload" --> BR
 ```
 
 Four moving parts:
