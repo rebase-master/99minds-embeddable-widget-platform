@@ -53,6 +53,72 @@ The five secrets MUST be ≥ 32 bytes of entropy. `openssl rand -hex 32` produce
 
 ---
 
+## Local testing
+
+### Happy-path smoke test
+
+1. **Boot the stack:**
+
+   ```bash
+   docker compose up --build
+   ```
+
+   Wait for `web` to log `Listening on http://0.0.0.0:3000`.
+
+2. **Seed the demo merchant + campaigns:**
+
+   ```bash
+   docker compose exec web bin/rails db:seed
+   ```
+
+   The output includes the API key, HMAC secret, SDK public key, a 15-min session token, and a complete `curl` with pre-computed signature. Keep that terminal open.
+
+3. **Open the demo page** (paste the URL from the seed output):
+
+   ```
+   http://localhost:3000/sdk_demo.html?token=<session-token>
+   ```
+
+   Status should turn green: `Connected. Waiting for triggers.`
+
+4. **Paste the seed's curl into a second shell.** Expected:
+   - Response: `202 Accepted` with `{"data":{"event_id":<n>,"status":"received"}}`.
+   - Demo page prints **both** seeded campaigns' render payloads within ~1 second (a banner blob and a modal blob, because the seeded event matches both `cart_total_cents >= 5000` and `item_count >= 5`).
+
+### Verifying the dangerous parts
+
+Re-run the seed's `curl` with one tweak at a time:
+
+| Tweak | Expected response |
+|---|---|
+| Same body, same `Idempotency-Key` (replay the curl as-is) | `202` with the **same** `event_id`; demo page silent (RETURNING gate) |
+| Same `Idempotency-Key`, change `cart_total_cents` | `422 idempotency.content_mismatch` |
+| Change ONLY `Idempotency-Key` (leave signature unchanged) | `401 auth.invalid_signature` — proves the key is in the HMAC payload |
+| Flip one hex char in `X-Signature` | `401 auth.invalid_signature` |
+| Drop the `Idempotency-Key` header | `400 event.idempotency_key_required` |
+| Set `occurred_at` to 10 minutes ago | `400 event.outside_replay_window` |
+| Body is not a JSON object (e.g. `-d '"hi"'`) | `400 request.invalid_json` or `event.invalid_payload` |
+| Demo page opened with `?token=garbage` | "Rejected. Bad or expired token." |
+| Demo page opened with no `?token=` | "Missing ?token=... in URL." |
+
+For cross-merchant isolation, seed a second merchant from the Rails console and confirm merchant A's demo page never sees merchant B's broadcasts. The code-level guarantee chain is documented under [§ Multi-tenant safety](#multi-tenant-safety).
+
+### Linter + security scans
+
+```bash
+docker compose exec web bin/rubocop                # style (rubocop-rails-omakase)
+docker compose exec web bin/brakeman --no-pager    # static security analysis
+docker compose exec web bin/bundler-audit          # known-vulnerable gem check
+```
+
+All three are wired into GitHub Actions on push (no service containers needed — see `.github/workflows/ci.yml`).
+
+### Tests
+
+RSpec is set up but specs are deferred to Phase 2 — see [§ What we'd build next](#what-wed-build-next). The smoke test above is intentionally manual for v1.
+
+---
+
 ## Architecture
 
 ```mermaid
