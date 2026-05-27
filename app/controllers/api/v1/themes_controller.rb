@@ -3,6 +3,10 @@ module Api
     class ThemesController < ApplicationController
       include AuthenticateMerchant
 
+      # Require explicit {"theme": {...}} body shape. Without this, Rails'
+      # wrap_parameters would silently wrap any unstructured body as a theme.
+      wrap_parameters false
+
       def update
         theme = params[:theme]
         unless theme.is_a?(ActionController::Parameters) || theme.is_a?(Hash)
