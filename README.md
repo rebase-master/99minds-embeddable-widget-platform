@@ -16,7 +16,7 @@ docker compose up --build
 docker compose exec web bin/rails db:seed
 ```
 
-The seed prints dev credentials and a ready-to-paste `curl` that hits the ingest endpoint with a pre-computed HMAC signature. Open the printed `sdk_demo.html?token=...` URL in a browser, paste the curl, watch the demo page receive the trigger within ~1 second.
+The seed prints dev credentials and **four ready-to-paste `curl` commands** (Tests 1–4) with pre-computed HMAC signatures, covering: the happy path, a content-mismatch replay, an outside-replay-window event, and an invalid payload. All four curls are valid for ~5 minutes from seed time (replay-window TTL) — re-seed if you wait longer. Open the printed `sdk_demo.html?token=...` URL in a browser, paste Test 1, and watch the demo page receive both triggers within ~1 second.
 
 If anything's broken, the most likely suspects are documented in [§ Known limitations](#known-limitations).
 
@@ -71,7 +71,8 @@ The five secrets MUST be ≥ 32 bytes of entropy. `openssl rand -hex 32` produce
    docker compose exec web bin/rails db:seed
    ```
 
-   The output includes the API key, HMAC secret, SDK public key, a 15-min session token, and a complete `curl` with pre-computed signature. Keep that terminal open.
+   The output includes the API key, HMAC secret, SDK public key, a 15-min session token, and **four pre-computed `curl` commands** (Tests 1–4). Keep that terminal open.
+   ![img.png](img.png)
 
 3. **Open the demo page** (paste the URL from the seed output):
 
@@ -81,24 +82,31 @@ The five secrets MUST be ≥ 32 bytes of entropy. `openssl rand -hex 32` produce
 
    Status should turn green: `Connected. Waiting for triggers.`
 
-4. **Paste the seed's curl into a second shell.** Expected:
+4. **Paste Test 1 from the seed output into a second shell.** Expected:
    - Response: `202 Accepted` with `{"data":{"event_id":<n>,"status":"received"}}`.
-   - Demo page prints **both** seeded campaigns' render payloads within ~1 second (a banner blob and a modal blob, because the seeded event matches both `cart_total_cents >= 5000` and `item_count >= 5`).
+   - Demo page prints **both** seeded campaigns' render payloads within ~1 second (a banner blob and a modal blob — the seeded event matches both `cart_total_cents >= 5000` and `item_count >= 5`).
 
 ### Verifying the dangerous parts
 
-Re-run the seed's `curl` with one tweak at a time:
+The seed output already includes Tests 1–4 as paste-and-go curls. Run them in order:
+
+| Test | What it exercises | Expected response |
+|---|---|---|
+| Test 1 (seed) | Happy path | `202` + demo page lights up with 2 triggers |
+| Replay Test 1 as-is | Idempotency — same key + same body | `202` with the **same** `event_id`; demo page silent (RETURNING gate) |
+| Test 2 (seed) | Content mismatch — same Idempotency-Key, different `cart_total_cents` | `422 idempotency.content_mismatch` |
+| Test 3 (seed) | Replay window — `occurred_at` is 10 min ago | `400 event.outside_replay_window` |
+| Test 4 (seed) | Invalid payload — `data` is a string, not a hash | `400 event.invalid_payload` |
+
+Additional manual tweaks worth verifying:
 
 | Tweak | Expected response |
 |---|---|
-| Same body, same `Idempotency-Key` (replay the curl as-is) | `202` with the **same** `event_id`; demo page silent (RETURNING gate) |
-| Same `Idempotency-Key`, change `cart_total_cents` | `422 idempotency.content_mismatch` |
 | Change ONLY `Idempotency-Key` (leave signature unchanged) | `401 auth.invalid_signature` — proves the key is in the HMAC payload |
 | Flip one hex char in `X-Signature` | `401 auth.invalid_signature` |
 | Drop the `Idempotency-Key` header | `400 event.idempotency_key_required` |
-| Set `occurred_at` to 10 minutes ago | `400 event.outside_replay_window` |
-| Body is not a JSON object (e.g. `-d '"hi"'`) | `400 request.invalid_json` or `event.invalid_payload` |
-| Demo page opened with `?token=garbage` | "Rejected. Bad or expired token." |
+| Body is not valid JSON (e.g. `-d 'not-json'`) | `400 request.invalid_json` |
+| Demo page opened with `?token=garbage` | "Disconnected." (token rejected at WebSocket upgrade) |
 | Demo page opened with no `?token=` | "Missing ?token=... in URL." |
 
 For cross-merchant isolation, seed a second merchant from the Rails console and confirm merchant A's demo page never sees merchant B's broadcasts. The code-level guarantee chain is documented under [§ Multi-tenant safety](#multi-tenant-safety).
@@ -343,6 +351,14 @@ app/
     ├── authentication/verify_hmac.rb
     ├── events/ingest.rb          # parse → window check → INSERT ON CONFLICT
     └── triggers/dispatch.rb      # ActionCable.server.broadcast
+```
+
+```
+config/
+├── initializers/
+│   ├── acts_as_tenant.rb             # require_tenant=true + Sidekiq middleware
+│   └── active_record_encryption.rb  # bridges ACTIVE_RECORD_ENCRYPTION_* env vars to Rails config
+└── ...
 ```
 
 Common commands:
