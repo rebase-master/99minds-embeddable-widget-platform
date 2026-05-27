@@ -83,6 +83,16 @@ RSpec.describe "POST /v1/events", type: :request do
 
   # ─── Invalid payload ──────────────────────────────────────────────────────
 
+  context "body is a JSON scalar (not an object)" do
+    let(:body) { '"Hi"' }
+
+    it "returns 400 event.invalid_payload" do
+      post "/v1/events", params: body, headers: headers
+      expect(response).to have_http_status(:bad_request)
+      expect(JSON.parse(response.body)["error"]["code"]).to eq("event.invalid_payload")
+    end
+  end
+
   context "data is not a hash" do
     let(:body) do
       JSON.generate(
