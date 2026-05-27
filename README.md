@@ -124,12 +124,14 @@ All three are wired into GitHub Actions on push (no service containers needed â€
 ### Tests
 
 ```bash
-# One-time: create and migrate the test database (docker-compose only sets up development).
-docker compose exec web bin/rails db:test:prepare
+# One-time: create and migrate the test database.
+docker compose run --rm test bin/rails db:test:prepare
 
-# Run the suite (rails_helper.rb forces RAILS_ENV=test regardless of container env).
-docker compose exec web bundle exec rspec
+# Run the suite.
+docker compose run --rm test bundle exec rspec
 ```
+
+The `test` service in `docker-compose.yml` overrides `RAILS_ENV: test` over the shared development env block. All other secrets (`API_KEY_PEPPER`, etc.) are inherited from the shared block â€” no duplication.
 
 ---
 
@@ -373,8 +375,8 @@ docker compose up --build              # boot everything
 docker compose exec web bin/rails db:seed
 docker compose exec web bin/rails console
 docker compose exec web bundle exec rubocop
-docker compose exec web bin/rails db:test:prepare   # one-time test DB setup
-docker compose exec web bundle exec rspec            # run specs
+docker compose run --rm test bin/rails db:test:prepare  # one-time test DB setup
+docker compose run --rm test bundle exec rspec          # run specs
 docker compose down -v                 # nuke volumes (Postgres, Redis, bundle cache)
 ```
 
