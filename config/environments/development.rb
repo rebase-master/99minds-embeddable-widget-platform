@@ -6,6 +6,11 @@ Rails.application.configure do
   # Make code changes take effect immediately without server restart.
   config.enable_reloading = true
 
+  # Action Cable: allow the demo page (and any localhost client) to connect.
+  # See CLAUDE.md Runtime Gotcha §5.
+  config.action_cable.disable_request_forgery_protection = true
+  config.action_cable.allowed_request_origins = [ /http:\/\/localhost(:\d+)?/, /http:\/\/127\.0\.0\.1(:\d+)?/ ]
+
   # Do not eager load code on boot.
   config.eager_load = false
 
