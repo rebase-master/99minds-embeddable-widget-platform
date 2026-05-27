@@ -26,10 +26,15 @@ class EvaluateEventJob
           returning: [ :id ]
         )
 
-        # At-most-once gate (TRADEOFFS.md Stage 1.4b): dispatch only when the insert
+        # At-most-once gate (TRADEOFFS Stage 1.4b): dispatch only when the insert
         # produced a new row. Conflict → already evaluated → skip silently.
         next unless result.rows.first
-        # Triggers::Dispatch.call(result.rows.first.first) — wired in Stage 1.6.
+
+        Triggers::Dispatch.call(
+          merchant_id: merchant_id,
+          shopper_id: event.shopper_id,
+          render_payload: campaign.render
+        )
       end
     end
   end
