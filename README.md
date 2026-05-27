@@ -123,15 +123,34 @@ All three are wired into GitHub Actions on push (no service containers needed �
 
 ### Tests
 
-```bash
-# One-time: create and migrate the test database.
-docker compose run --rm test bin/rails db:test:prepare
+Specs run inside a dedicated `test` service (see `docker-compose.yml`) that inherits the shared env block and only overrides `RAILS_ENV: test`. No env-var duplication, no `rails_helper.rb` overrides.
 
-# Run the suite.
+**One-time setup** (creates and migrates the test database):
+
+```bash
+docker compose run --rm test bin/rails db:test:prepare
+```
+
+**Run the full suite:**
+
+```bash
 docker compose run --rm test bundle exec rspec
 ```
 
-The `test` service in `docker-compose.yml` overrides `RAILS_ENV: test` over the shared development env block. All other secrets (`API_KEY_PEPPER`, etc.) are inherited from the shared block — no duplication.
+**Run a single spec file or example:**
+
+```bash
+docker compose run --rm test bundle exec rspec spec/requests/api/v1/events_spec.rb
+docker compose run --rm test bundle exec rspec spec/requests/api/v1/events_spec.rb:42  # by line
+```
+
+**Re-prepare the test DB** after pulling new migrations:
+
+```bash
+docker compose run --rm test bin/rails db:test:prepare
+```
+
+Current coverage: request specs for every endpoint in [§ Endpoints](#endpoints) (happy paths + auth failures + HMAC + idempotency + cross-tenant 404). Dangerous-parts specs (Stage 2.2 — tenant leak at the job layer, idempotency double-fire, evaluator unit) are next.
 
 ---
 
