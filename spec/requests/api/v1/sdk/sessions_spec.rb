@@ -27,8 +27,9 @@ RSpec.describe "POST /v1/sdk/sessions", type: :request do
     token = JSON.parse(response.body)["data"]["token"]
     claims = Sdk::SessionToken.decode(token)
     expect(claims).to be_a(Hash)
-    expect(claims[:merchant_id].to_i).to eq(merchant.id)
-    expect(claims[:shopper_id]).to eq("shp_alice")
+    # MessageVerifier uses JSON serialization in Rails 8 — symbol keys come back as strings.
+    expect(claims["merchant_id"]).to eq(merchant.id)
+    expect(claims["shopper_id"]).to eq("shp_alice")
   end
 
   # ─── Input validation ─────────────────────────────────────────────────────

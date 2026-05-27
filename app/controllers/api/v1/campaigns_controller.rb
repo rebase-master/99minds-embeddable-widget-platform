@@ -53,7 +53,7 @@ module Api
 
       def ensure_hash(value, field_name)
         return {} if value.nil?
-        return value.to_h if value.is_a?(ActionController::Parameters)
+        return value.to_unsafe_h if value.is_a?(ActionController::Parameters)
         return value if value.is_a?(Hash)
         raise ApiError.new(status: :unprocessable_entity, code: "campaign.invalid",
                            message: "#{field_name} must be a JSON object.")
