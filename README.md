@@ -137,7 +137,6 @@ flowchart LR
   end
 
   subgraph backend["Our backend"]
-    direction TB
     EV["POST /v1/events"]
     SE["POST /v1/sdk/sessions"]
     TH["GET /v1/sdk/theme"]
